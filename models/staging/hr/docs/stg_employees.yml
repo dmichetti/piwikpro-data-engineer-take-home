@@ -1,0 +1,56 @@
+version: 2
+
+models:
+  - name: stg_employees
+    description: Employee master data. One row per employee.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(employee_status = 'Inactive') = (employee_termination_date is not null)"
+    columns:
+      - name: employee_id
+        description: Unique employee identifier.
+        data_tests:
+          - unique
+          - not_null_empty_string
+
+      - name: employee_first_name
+        description: Employee first name.
+
+      - name: employee_last_name
+        description: Employee last name.
+
+      - name: employee_full_name
+        description: Employee first and last name, space-separated.
+
+      - name: employee_email_address
+        description: Work email address (formats vary in source).
+
+      - name: employee_department
+        description: Department assignment.
+
+      - name: employee_job_title
+        description: Job title from HR system.
+
+      - name: employee_hire_date
+        description: Date employee was hired.
+
+      - name: employee_termination_date
+        description: Date employee was terminated. Null if still active.
+
+      - name: employee_status
+        description: Employment status as recorded in the source system.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Active', 'Inactive']
+          - not_null_empty_string
+
+      - name: employee_reports_to
+        description: Employee ID of direct manager. Null for top-level managers.
+
+      - name: employee_is_active
+        description: True if status is Active.
+
+      - name: employee_reference_date
+        description: Date the source export was generated, as recorded in the raw file.

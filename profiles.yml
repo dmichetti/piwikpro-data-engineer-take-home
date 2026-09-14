@@ -1,0 +1,8 @@
+piwikpro_analytics:
+  outputs:
+    dev:
+      type: duckdb
+      path: warehouse.duckdb
+      schema: staging_hr
+      threads: 1
+  target: dev
