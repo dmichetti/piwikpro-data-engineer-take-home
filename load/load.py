@@ -4,15 +4,15 @@ No data-quality cleanup happens here on purpose — this is the raw layer.
 Cleaning (e.g. Billable? Y/Yes/N/No, ambiguous project leads, ...) is a dbt
 staging concern, done later where it's visible and testable.
 
-The only transformation applied is structural: skipping the report's title
-rows to find the real header, and pulling the "Generated"/"Report Date" row
-out into a `source_generated_at` column on every row.
+The only transformation applied is structural: locating the header and
+"Generated"/"Report Date" rows by content rather than fixed position, so a
+source layout change fails loudly instead of silently misparsing.
 """
 
 import logging
 import re
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 import dlt
 import pandas as pd
@@ -20,33 +20,27 @@ import pandas as pd
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
+# --- Paths & constants ---------------------------------------------------
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
 DUCKDB_PATH = REPO_ROOT / "warehouse.duckdb"
 
-# Both source files share the same layout: title, generated/report date, blank, header.
-GENERATED_DATE_ROW = 1
-HEADER_ROW = 3
+# Structural rows are always near the top; bounding the search avoids ever
+# mistaking a data row for one of them.
+STRUCTURAL_SEARCH_ROWS = 10
 
+GENERATED_DATE_LABEL_PATTERN = re.compile(r"generated|report date", re.IGNORECASE)
 DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}")
 
-# dlt can't infer a type for a column that's still null in the first row it
-# processes, and defers adding such columns to the schema until it hits a
-# real value - appending them at the end instead of their source position.
-# A *partial* data_type hint doesn't fix this either: dlt groups explicitly
-# typed columns before inferred ones, so getting the source column order back
-# requires declaring data_type for every column, not just the affected one.
-# Each hint below must be its own dict literal, not a shared reference: dlt
-# mutates the hint dict in place while building the schema, so columns
-# sharing one object end up aliased onto each other.
+# --- dlt column type hints -------------------------------------------------
 def _text() -> dict[str, Any]:
     return {"data_type": "text"}
 
 
 def _date() -> dict[str, Any]:
-    # pandas has no date-only dtype, so pd.read_excel always hands these back
-    # as datetime64/Timestamp with an implicit 00:00:00 time. The source
-    # cells carry no time-of-day, so "date" is the accurate destination type.
+    # pandas has no date-only dtype - Excel dates always arrive as
+    # datetime64/Timestamp with an implicit 00:00:00 time we don't want.
     return {"data_type": "date"}
 
 
@@ -76,43 +70,88 @@ ASSIGNMENT_COLUMNS = {
     "source_generated_at": _text(),
 }
 
+# --- Structural row detection ----------------------------------------------
 
-def _extract_source_generated_at(raw_cell: Any) -> str:
-    """Pull the date out of a 'Generated: 2026-02-02' / 'Report Date: 02/02/2026' cell.
+def _find_row(
+    first_column: "pd.Series[Any]",
+    matches: Callable[[str], bool],
+    description: str,
+    filename: str,
+) -> int:
+    """Locate a structural row by content instead of a fixed position."""
+    for row_index, value in first_column.head(STRUCTURAL_SEARCH_ROWS).items():
+        if matches(str(value)):
+            return row_index
+    raise ValueError(
+        f"Could not find {description} in the first {STRUCTURAL_SEARCH_ROWS} "
+        f"rows of {filename} - the source layout may have changed."
+    )
 
-    Kept as the raw string exactly as it appears in the source (no format
-    normalization) - this is the raw layer.
-    """
+
+def _extract_source_generated_at(raw_cell: Any, filename: str) -> str:
+    """Pull the date out of a 'Generated: 2026-02-02' / 'Report Date: 02/02/2026' cell."""
     match = DATE_PATTERN.search(str(raw_cell))
-    return match.group(0) if match else str(raw_cell)
+    if not match:
+        raise ValueError(
+            f"Found a 'Generated'/'Report Date' row in {filename} but "
+            f"couldn't parse a date out of it: {raw_cell!r}"
+        )
+    return match.group(0)
 
 
-def read_excel_raw(filename: str, sheet_name: str) -> list[dict[str, Any]]:
+# --- Extraction --------------------------------------------------------
+
+def read_excel_raw(filename: str, sheet_name: str, header_anchor: str) -> list[dict[str, Any]]:
     raw = pd.read_excel(DATA_DIR / filename, sheet_name=sheet_name, header=None)
-    source_generated_at = _extract_source_generated_at(raw.iat[GENERATED_DATE_ROW, 0])
+    first_column = raw.iloc[:, 0]
 
-    df = raw.iloc[HEADER_ROW + 1 :].copy()
-    # Strip trailing "?" from header text (e.g. "Billable?") before dlt sees
-    # it: dlt's naming convention can't cleanly drop a trailing special
-    # character on its own and instead mangles it (e.g. into "billablex").
-    # This is structural header parsing, not a value-level transformation.
-    df.columns = raw.iloc[HEADER_ROW].str.rstrip("?")
+    generated_date_row = _find_row(
+        first_column,
+        lambda value: GENERATED_DATE_LABEL_PATTERN.search(value) is not None,
+        "a 'Generated'/'Report Date' row",
+        filename,
+    )
+    header_row = _find_row(
+        first_column,
+        lambda value: value == header_anchor,
+        f"a header row starting with {header_anchor!r}",
+        filename,
+    )
+
+    source_generated_at = _extract_source_generated_at(raw.iat[generated_date_row, 0], filename)
+
+    df = raw.iloc[header_row + 1 :].copy()
+
+    # Strip trailing "?" (e.g. "Billable?"): dlt can't cleanly drop it on its
+    # own and mangles the column name instead (e.g. into "billablex").
+    df.columns = raw.iloc[header_row].str.rstrip("?")
+
+    # Drop rows null across every column - a trailing-blank-row artifact of
+    # Excel exports, not a data value. A partially-incomplete row stays as-is.
+    row_count_before_dropna = len(df)
+    df = df.dropna(how="all")
+    dropped_row_count = row_count_before_dropna - len(df)
+    if dropped_row_count:
+        logger.info("Dropped %d fully-empty row(s) from %s", dropped_row_count, filename)
+
     df["source_generated_at"] = source_generated_at
 
     logger.info("Read %d rows from %s (sheet '%s')", len(df), filename, sheet_name)
     return df.to_dict(orient="records")
 
 
-# write_disposition="replace": both sources are full snapshots, not incremental
-# feeds, so re-running the load should reproduce the same state rather than
-# accumulate duplicate rows.
+# --- dlt resources -----------------------------------------------------
+
+
 @dlt.resource(
     name="hr_employees_export",
-    write_disposition="replace",
+    write_disposition="replace",  # full snapshot each run, not incremental
     columns=EMPLOYEE_COLUMNS,
 )
 def hr_employees_export() -> Iterator[list[dict[str, Any]]]:
-    yield read_excel_raw("hr_employees_export.xlsx", "Employee Master Data")
+    yield read_excel_raw(
+        "hr_employees_export.xlsx", "Employee Master Data", header_anchor="Employee ID"
+    )
 
 
 @dlt.resource(
@@ -121,7 +160,12 @@ def hr_employees_export() -> Iterator[list[dict[str, Any]]]:
     columns=ASSIGNMENT_COLUMNS,
 )
 def project_assignments_report() -> Iterator[list[dict[str, Any]]]:
-    yield read_excel_raw("project_assignments_report.xlsx", "Project Assignments")
+    yield read_excel_raw(
+        "project_assignments_report.xlsx", "Project Assignments", header_anchor="Assignment ID"
+    )
+
+
+# --- Entry point ---------------------------------------------------------
 
 
 def main() -> None:
