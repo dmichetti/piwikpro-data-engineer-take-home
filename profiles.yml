@@ -5,4 +5,14 @@ piwikpro_analytics:
       path: warehouse.duckdb
       schema: staging_hr
       threads: 1
+    test:
+      type: duckdb
+      path: warehouse_test.duckdb
+      schema: staging_hr
+      threads: 1
+    prod:
+      type: duckdb
+      path: warehouse_prod.duckdb
+      schema: staging_hr
+      threads: 4
   target: dev

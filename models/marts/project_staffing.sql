@@ -2,58 +2,49 @@
     materialized='table'
 ) }}
 
-with employees as (
-
-    select
-        employee_id,
-        employee_full_name
-    from {{ ref('stg_employees') }}
-    where employee_is_active
-
-),
-
-assignments as (
-
-    select
-        employee_id,
-        project_code,
-        project_name,
-        assignment_role,
-        assignment_weekly_hours,
-        is_assignment_billable
-    from {{ ref('stg_employee_assignements') }}
-
+with assignments as (
+    select *
+    from {{ ref('int_employee_assignements') }}
 ),
 
 {#- Every project that has at least one assignment record, active or not:
     this is what lets a project with zero active employees still appear
-    below. Sourced from assignments directly, not the employee join, so it's
-    unaffected by the active-employee filter above. -#}
+    below. int_employee_assignements preserves every assignment row
+    regardless of employee status  #}
 projects as (
     select distinct project_code, project_name
     from assignments
 ),
 
 active_assignments as (
+    select *
+    from assignments
+    where employee_is_active
+),
+
+{#- When a project has more than one active Lead, pick the one with the
+    most weekly_hours as the primary lead (employee_id as a tiebreaker for
+    full determinism). The anomaly itself is flagged independently upstream,
+    see tests/warn_multiple_active_leads_per_project.sql - not surfaced as a
+    column here. #}
+leads_ranked as (
     select
-        a.project_code,
-        a.assignment_role,
-        a.assignment_weekly_hours,
-        a.is_assignment_billable,
-        e.employee_id,
-        e.employee_full_name
-    from assignments a
-    inner join employees e on a.employee_id = e.employee_id
+        project_code,
+        employee_full_name,
+        row_number() over (
+            partition by project_code
+            order by assignment_weekly_hours desc, employee_id
+        ) as lead_rank
+    from active_assignments
+    where assignment_role = 'Lead'
 ),
 
 leads as (
     select
         project_code,
-        string_agg(employee_full_name, ', ' order by employee_id) as project_lead,
-        count(*) as project_lead_count
-    from active_assignments
-    where assignment_role = 'Lead'
-    group by project_code
+        employee_full_name as project_lead
+    from leads_ranked
+    where lead_rank = 1
 ),
 
 team as (
@@ -67,19 +58,23 @@ team as (
         ) as project_total_billable_weekly_hours
     from active_assignments
     group by project_code
+),
+
+final as (
+    select
+        p.project_code,
+        p.project_name,
+        l.project_lead,
+        coalesce(t.project_team_size, 0) as project_team_size,
+        coalesce(t.project_billable_team_size, 0) as project_billable_team_size,
+        cast(coalesce(t.project_total_weekly_hours, 0) as bigint) as project_total_weekly_hours,
+        cast(coalesce(t.project_total_billable_weekly_hours, 0) as bigint) as project_total_billable_weekly_hours
+    from projects p
+    left join leads l on p.project_code = l.project_code
+    left join team t on p.project_code = t.project_code
 )
 
 select
-    p.project_code,
-    p.project_name,
-    l.project_lead,
-    coalesce(l.project_lead_count, 0) as project_lead_count,
-    coalesce(t.project_team_size, 0) as project_team_size,
-    coalesce(t.project_billable_team_size, 0) as project_billable_team_size,
-    {#- sum() over a bigint column widens to duckdb's hugeint by default;
-        cast back down since these totals never approach that range. -#}
-    cast(coalesce(t.project_total_weekly_hours, 0) as bigint) as project_total_weekly_hours,
-    cast(coalesce(t.project_total_billable_weekly_hours, 0) as bigint) as project_total_billable_weekly_hours
-from projects p
-left join leads l on p.project_code = l.project_code
-left join team t on p.project_code = t.project_code
+    *,
+    current_date as refreshed_date
+from final

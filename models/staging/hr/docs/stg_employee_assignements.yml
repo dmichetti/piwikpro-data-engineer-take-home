@@ -3,6 +3,8 @@ version: 2
 models:
   - name: stg_employee_assignements
     description: Project assignment records. One row per employee-project assignment.
+    data_tests:
+      - row_exists
     columns:
       - name: assignment_id
         description: Unique assignment identifier.
@@ -21,9 +23,13 @@ models:
 
       - name: project_code
         description: Project code.
+        data_tests:
+          - not_null_empty_string
 
       - name: project_name
         description: Project name.
+        data_tests:
+          - not_null_empty_string
 
       - name: assignment_role
         description: Employee's role on the assignment.
@@ -35,16 +41,23 @@ models:
 
       - name: assignment_start_date
         description: Date the assignment started.
+        data_tests:
+          - not_null
 
       - name: assignment_weekly_hours
         description: Weekly hours allocated to the assignment.
         data_tests:
+          - not_null
           - dbt_utils.expression_is_true:
               arguments:
                 expression: "> 0"
 
       - name: is_assignment_billable
         description: True if the source billable flag is any shape of "yes", false if any shape of "no", null otherwise.
+        data_tests:
+          - not_null
 
       - name: reference_date
         description: Date the source export was generated, as recorded in the raw file.
+        data_tests:
+          - not_null_empty_string

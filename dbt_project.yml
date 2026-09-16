@@ -31,6 +31,9 @@ models:
       hr:
         +schema: staging_hr
         +tags: ['staging']
+    intermediate:
+      +schema: intermediate
+      +tags: ['intermediate']
     marts:
       +schema: marts
       +tags: ['marts']
