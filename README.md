@@ -4,6 +4,19 @@ Two HR/PM Excel exports are loaded raw into DuckDB with `dlt`, then transformed
 with `dbt` into `project_staffing`: one row per project with its lead, active
 team size and active weekly hours.
 
+## Prerequisites
+
+Nothing else is needed: Python, dbt and DuckDB all live inside the image.
+
+- **Docker**, with the daemon running ([install guide](https://docs.docker.com/engine/install/)).
+  On Linux, add your user to the `docker` group (or prefix the commands with `sudo`).
+- **git**, and the project cloned with `git clone` (not a zip download): the run
+  block reads the current branch name from it.
+- **A bash-like shell** (Linux, macOS, or WSL on Windows), since the run block
+  uses `$(...)`, `tr` and `sed`.
+
+Run every command from the repo root.
+
 ## How to run
 
 ```bash
