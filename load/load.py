@@ -4,9 +4,11 @@ No data-quality cleanup happens here on purpose — this is the raw layer.
 Cleaning (e.g. Billable? Y/Yes/N/No, ambiguous project leads, ...) is a dbt
 staging concern, done later where it's visible and testable.
 
-The only transformation applied is structural: locating the header and
-"Generated"/"Report Date" rows by content rather than fixed position, so a
-source layout change fails loudly instead of silently misparsing.
+The only transformations applied are structural: locating the header and
+"Generated"/"Report Date" rows by content rather than fixed position, and
+renaming headers to their final column names per the specs below. Any header
+missing from, or not in, a spec fails the load, so a source layout change fails
+loudly instead of silently misparsing.
 """
 
 import logging
@@ -47,31 +49,41 @@ def _date() -> dict[str, Any]:
     return {"data_type": "date"}
 
 
-EMPLOYEE_COLUMNS = {
-    "employee_id": _text(),
-    "first_name": _text(),
-    "last_name": _text(),
-    "email_address": _text(),
-    "department": _text(),
-    "job_title": _text(),
-    "date_of_hire": _date(),
-    "termination_date": _date(),
-    "status": _text(),
-    "reports_to": _text(),
-    "source_generated_at": _text(),
+# One spec per source file: {source header: (final column name, dlt type hint)}.
+# It is the contract with the file - the load fails if the headers found differ
+# from these - and the single source for renames and dlt column hints. The first
+# entry doubles as the anchor used to locate the header row.
+EMPLOYEE_SPEC = {
+    "Employee ID": ("employee_id", _text()),
+    "First Name": ("first_name", _text()),
+    "Last Name": ("last_name", _text()),
+    "Email Address": ("email_address", _text()),
+    "Department": ("department", _text()),
+    "Job Title": ("job_title", _text()),
+    "Date of Hire": ("date_of_hire", _date()),
+    "Termination Date": ("termination_date", _date()),
+    "Status": ("status", _text()),
+    "Reports To": ("reports_to", _text()),
 }
 
-ASSIGNMENT_COLUMNS = {
-    "assignment_id": _text(),
-    "emp_id": _text(),
-    "project_code": _text(),
-    "project_name": _text(),
-    "assignment_role": _text(),
-    "start_date": _date(),
-    "weekly_hours": {"data_type": "bigint"},
-    "billable": _text(),
-    "source_generated_at": _text(),
+ASSIGNMENT_SPEC = {
+    "Assignment ID": ("assignment_id", _text()),
+    "Emp. ID": ("emp_id", _text()),
+    "Project Code": ("project_code", _text()),
+    "Project Name": ("project_name", _text()),
+    "Assignment Role": ("assignment_role", _text()),
+    "Start Date": ("start_date", _date()),
+    "Weekly Hours": ("weekly_hours", {"data_type": "bigint"}),
+    "Billable?": ("billable", _text()),
 }
+
+# Added by the loader, not present in the file, so never part of the header check.
+LOADER_COLUMNS = {"source_generated_at": _text()}
+
+
+def _dlt_columns(spec: dict[str, tuple[str, dict[str, Any]]]) -> dict[str, dict[str, Any]]:
+    return {name: hint for name, hint in spec.values()} | LOADER_COLUMNS
+
 
 # --- Structural row detection ----------------------------------------------
 
@@ -91,6 +103,20 @@ def _find_row(
     )
 
 
+def _validate_headers(
+    headers: list[Any], spec: dict[str, tuple[str, dict[str, Any]]], filename: str
+) -> None:
+    """Fail loudly on any missing, unexpected or duplicated header."""
+    missing = sorted(map(str, set(spec) - set(headers)))
+    unexpected = sorted(map(str, set(headers) - set(spec)))
+    has_duplicates = len(headers) != len(set(headers))
+    if missing or unexpected or has_duplicates:
+        raise ValueError(
+            f"Header mismatch in {filename} - the source layout may have changed. "
+            f"Missing: {missing}; unexpected: {unexpected}; duplicates: {has_duplicates}."
+        )
+
+
 def _extract_source_generated_at(raw_cell: Any, filename: str) -> str:
     """Pull the date out of a 'Generated: 2026-02-02' / 'Report Date: 02/02/2026' cell."""
     match = DATE_PATTERN.search(str(raw_cell))
@@ -104,7 +130,10 @@ def _extract_source_generated_at(raw_cell: Any, filename: str) -> str:
 
 # --- Extraction --------------------------------------------------------
 
-def read_excel_raw(filename: str, sheet_name: str, header_anchor: str) -> list[dict[str, Any]]:
+def read_excel_raw(
+    filename: str, sheet_name: str, spec: dict[str, tuple[str, dict[str, Any]]]
+) -> list[dict[str, Any]]:
+    header_anchor = next(iter(spec))
     raw = pd.read_excel(DATA_DIR / filename, sheet_name=sheet_name, header=None)
     first_column = raw.iloc[:, 0]
 
@@ -123,11 +152,15 @@ def read_excel_raw(filename: str, sheet_name: str, header_anchor: str) -> list[d
 
     source_generated_at = _extract_source_generated_at(raw.iat[generated_date_row, 0], filename)
 
+    headers = list(raw.iloc[header_row])
+    _validate_headers(headers, spec, filename)
+
     df = raw.iloc[header_row + 1 :].copy()
 
-    # Strip trailing "?" (e.g. "Billable?"): dlt can't cleanly drop it on its
-    # own and mangles the column name instead (e.g. into "billablex").
-    df.columns = raw.iloc[header_row].str.rstrip("?")
+    # Rename explicitly rather than leaving it to dlt's normalizer, which
+    # mangles some headers (e.g. "Billable?" into "billablex").
+    df.columns = headers
+    df = df.rename(columns={source: name for source, (name, _) in spec.items()})
 
     # Drop rows null across every column - a trailing-blank-row artifact of
     # Excel exports, not a data value. A partially-incomplete row stays as-is.
@@ -149,22 +182,20 @@ def read_excel_raw(filename: str, sheet_name: str, header_anchor: str) -> list[d
 @dlt.resource(
     name="hr_employees_export",
     write_disposition="replace",  # full snapshot each run, not incremental
-    columns=EMPLOYEE_COLUMNS,
+    columns=_dlt_columns(EMPLOYEE_SPEC),
 )
 def hr_employees_export() -> Iterator[list[dict[str, Any]]]:
-    yield read_excel_raw(
-        "hr_employees_export.xlsx", "Employee Master Data", header_anchor="Employee ID"
-    )
+    yield read_excel_raw("hr_employees_export.xlsx", "Employee Master Data", EMPLOYEE_SPEC)
 
 
 @dlt.resource(
     name="project_assignments_report",
     write_disposition="replace",
-    columns=ASSIGNMENT_COLUMNS,
+    columns=_dlt_columns(ASSIGNMENT_SPEC),
 )
 def project_assignments_report() -> Iterator[list[dict[str, Any]]]:
     yield read_excel_raw(
-        "project_assignments_report.xlsx", "Project Assignments", header_anchor="Assignment ID"
+        "project_assignments_report.xlsx", "Project Assignments", ASSIGNMENT_SPEC
     )
 
 
