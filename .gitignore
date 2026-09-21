@@ -20,6 +20,9 @@ logs/
 # Ad-hoc data exports (e.g. one-off CSVs), not pipeline output
 *.csv
 
+# Container output mount (see README): the database and anything else the run writes
+output/
+
 # Secrets
 .env
 

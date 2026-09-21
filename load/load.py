@@ -10,6 +10,7 @@ source layout change fails loudly instead of silently misparsing.
 """
 
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any, Callable, Iterator
@@ -24,7 +25,9 @@ logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
-DUCKDB_PATH = REPO_ROOT / "warehouse.duckdb"
+# Overridable so each dbt target (dev/test/prod) can load into its own file;
+# relative values resolve against the repo root, like profiles.yml's paths.
+DUCKDB_PATH = REPO_ROOT / os.environ.get("DUCKDB_PATH", "warehouse.duckdb")
 
 # Structural rows are always near the top; bounding the search avoids ever
 # mistaking a data row for one of them.

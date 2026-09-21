@@ -2,17 +2,17 @@ piwikpro_analytics:
   outputs:
     dev:
       type: duckdb
-      path: warehouse.duckdb
+      path: "{{ env_var('DUCKDB_PATH', 'warehouse.duckdb') }}"
       schema: staging_hr
       threads: 1
     test:
       type: duckdb
-      path: warehouse_test.duckdb
+      path: "{{ env_var('DUCKDB_PATH', 'warehouse_test.duckdb') }}"
       schema: staging_hr
       threads: 1
     prod:
       type: duckdb
-      path: warehouse_prod.duckdb
+      path: "{{ env_var('DUCKDB_PATH', 'warehouse_prod.duckdb') }}"
       schema: staging_hr
       threads: 4
   target: dev
