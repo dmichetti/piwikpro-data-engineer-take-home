@@ -1,15 +1,6 @@
 version: 2
 
 macros:
-  - name: test_check_ddl
-    description: >
-      Smoke-tests that a model's DDL is valid and actually queryable, by
-      compiling and executing `select * from {{ model }} where 1=0`. The
-      predicate is always false, so this test always passes on its own
-      terms — its value isn't in catching bad data, it's that dbt will
-      error out (rather than silently pass) if the model fails to compile
-      or references columns/relations that don't exist.
-
   - name: test_not_null_empty_string
     description: >
       Fails if any row has the given column as NULL *or* an empty string
