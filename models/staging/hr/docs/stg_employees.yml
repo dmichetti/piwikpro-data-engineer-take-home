@@ -1,0 +1,81 @@
+version: 2
+
+models:
+  - name: stg_employees
+    description: Employee master data. One row per employee.
+    data_tests:
+      - row_exists
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(employee_status = 'Inactive') = (employee_termination_date is not null)"
+    columns:
+      - name: employee_id
+        description: Unique employee identifier.
+        data_tests:
+          - unique
+          - not_null_empty_string
+
+      - name: employee_first_name
+        description: Employee first name.
+        data_tests:
+          - not_null_empty_string
+
+      - name: employee_last_name
+        description: Employee last name.
+        data_tests:
+          - not_null_empty_string
+
+      - name: employee_full_name
+        description: Employee first and last name, space-separated.
+        data_tests:
+          - not_null_empty_string
+
+      - name: employee_email_address
+        description: Work email address (formats vary in source).
+        data_tests:
+          - not_null_empty_string
+
+      - name: employee_department
+        description: Department assignment.
+        data_tests:
+          - not_null_empty_string
+
+      - name: employee_job_title
+        description: Job title from HR system.
+        data_tests:
+          - not_null_empty_string
+
+      - name: employee_hire_date
+        description: Date employee was hired.
+        data_tests:
+          - not_null
+
+      - name: employee_termination_date
+        description: >
+          Date employee was terminated. Null if still active - excluded from
+          not-null testing on purpose, this is expected, not missing data.
+
+      - name: employee_status
+        description: Employment status as recorded in the source system.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Active', 'Inactive']
+          - not_null_empty_string
+
+      - name: employee_reports_to
+        description: >
+          Employee ID of direct manager. Null for top-level managers -
+          excluded from not-null testing on purpose, same reasoning as
+          employee_termination_date.
+
+      - name: employee_is_active
+        description: >
+          True if status is Active and termination_date is null. 
+        data_tests:
+          - not_null
+
+      - name: reference_date
+        description: Date the source export was generated, as recorded in the raw file.
+        data_tests:
+          - not_null_empty_string

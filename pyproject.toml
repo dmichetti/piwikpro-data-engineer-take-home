@@ -1,0 +1,12 @@
+[project]
+name = "piwikpro-analytics"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dbt-core>=1.12.4",
+    "dbt-duckdb>=1.11.0",
+    "dlt[duckdb]>=1.30.0",
+    "openpyxl>=3.1.5",
+    "pandas>=3.0.5",
+]

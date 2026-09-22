@@ -1,0 +1,111 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: hr_employees_export
+        description: Raw employee master data export from HR system.
+        columns:
+          - name: employee_id
+            data_type: varchar
+            description: Unique employee identifier.
+
+          - name: first_name
+            data_type: varchar
+            description: Employee first name.
+
+          - name: last_name
+            data_type: varchar
+            description: Employee last name.
+
+          - name: email_address
+            data_type: varchar
+            description: Work email address (formats vary in source).
+
+          - name: department
+            data_type: varchar
+            description: Department assignment.
+
+          - name: job_title
+            data_type: varchar
+            description: Job title from HR system.
+
+          - name: date_of_hire
+            data_type: date
+            description: Date employee was hired.
+
+          - name: termination_date
+            data_type: date
+            description: Date employee was terminated. Null if still active.
+
+          - name: status
+            data_type: varchar
+            description: Employment status as recorded in the source system.
+
+          - name: reports_to
+            data_type: varchar
+            description: Employee ID of direct manager. Null for top-level managers.
+
+          - name: source_generated_at
+            data_type: varchar
+            description: Date the source export was generated, as recorded in the raw file.
+
+          - name: _dlt_load_id
+            data_type: varchar
+            description: dlt lineage - load identifier.
+
+          - name: _dlt_id
+            data_type: varchar
+            description: dlt lineage - record identifier.
+
+      - name: project_assignments_report
+        description: Raw project assignment records export.
+        columns:
+          - name: assignment_id
+            data_type: varchar
+            description: Unique assignment identifier.
+
+          - name: emp_id
+            data_type: varchar
+            description: Employee ID assigned to the project.
+
+          - name: project_code
+            data_type: varchar
+            description: Project code.
+
+          - name: project_name
+            data_type: varchar
+            description: Project name.
+
+          - name: assignment_role
+            data_type: varchar
+            description: Employee's role on the assignment.
+
+          - name: start_date
+            data_type: date
+            description: Date the assignment started.
+
+          - name: weekly_hours
+            data_type: bigint
+            description: Weekly hours allocated to the assignment.
+
+          - name: billable
+            data_type: varchar
+            description: Raw billable flag as recorded in the source system.
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: ['Y', 'Yes', 'N', 'No']
+
+          - name: source_generated_at
+            data_type: varchar
+            description: Date the source export was generated, as recorded in the raw file.
+
+          - name: _dlt_load_id
+            data_type: varchar
+            description: dlt lineage - load identifier.
+
+          - name: _dlt_id
+            data_type: varchar
+            description: dlt lineage - record identifier.

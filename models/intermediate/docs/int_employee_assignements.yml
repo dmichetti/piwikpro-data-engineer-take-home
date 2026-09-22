@@ -1,0 +1,35 @@
+version: 2
+
+models:
+  - name: int_employee_assignements
+    description: >
+      Assignment records joined to their employee, active or not. One row
+      per assignment - every assignment survives the join regardless of the
+      assigned employee's status (left join), so downstream models can
+      derive a complete project list from this alone.
+    data_tests:
+      - row_exists
+    columns:
+      - name: project_code
+        description: Project code.
+
+      - name: project_name
+        description: Project name.
+
+      - name: assignment_role
+        description: Employee's role on the assignment.
+
+      - name: assignment_weekly_hours
+        description: Weekly hours allocated to the assignment.
+
+      - name: is_assignment_billable
+        description: True if the assignment is billable, false if not, null if unknown.
+
+      - name: employee_id
+        description: Employee ID assigned to the project.
+
+      - name: employee_full_name
+        description: Employee's full name.
+
+      - name: employee_is_active
+        description: True if the assigned employee is currently active.

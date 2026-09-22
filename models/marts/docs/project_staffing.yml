@@ -1,0 +1,54 @@
+version: 2
+
+models:
+  - name: project_staffing
+    description: >
+      Staffing summary. One row per project, including projects with zero active employees 
+      assigned.
+    data_tests:
+      - row_exists
+    columns:
+      - name: project_code
+        data_type: varchar
+        description: Project code.
+        data_tests:
+          - unique
+          - not_null_empty_string
+
+      - name: project_name
+        data_type: varchar
+        description: Project name.
+        data_tests:
+          - not_null_empty_string
+
+      - name: project_lead
+        data_type: varchar
+        description: >
+          Name of the active employee with role Lead on this project. If more
+          than one is active, the one with the most assignment_weekly_hours
+          wins (employee_id as tiebreaker). Null if no active employee
+          currently holds the Lead role.
+
+      - name: project_team_size
+        data_type: bigint
+        description: Count of distinct active employees assigned to the project, any role.
+
+      - name: project_billable_team_size
+        data_type: bigint
+        description: >
+          Count of distinct active employees with at least one billable
+          assignment on the project.
+
+      - name: project_total_weekly_hours
+        data_type: bigint
+        description: Sum of weekly hours allocated by active employees, any role.
+
+      - name: project_total_billable_weekly_hours
+        data_type: bigint
+        description: >
+          Sum of weekly hours allocated by active employees where the
+          assignment is billable.
+
+      - name: refreshed_date
+        data_type: date
+        description: Date this mart was last built.
