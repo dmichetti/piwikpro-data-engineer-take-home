@@ -5,6 +5,12 @@ models:
     description: Project assignment records. One row per employee-project assignment.
     data_tests:
       - row_exists
+      # An employee assigned twice to the same project would silently
+      # double-count their hours in project_staffing's sum(assignment_weekly_hours);
+      # this stops that at the source rather than downstream in the mart.
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [employee_id, project_code]
     columns:
       - name: assignment_id
         description: Unique assignment identifier.
