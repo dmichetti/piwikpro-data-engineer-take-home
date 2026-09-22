@@ -1,8 +1,6 @@
-"""Raw-layer load: copy the two HR/PM Excel exports into DuckDB, untouched.
+"""
+Raw-layer load: copy the two HR/PM Excel exports into DuckDB, untouched.
 
-No data-quality cleanup happens here on purpose — this is the raw layer.
-Cleaning (e.g. Billable? Y/Yes/N/No, ambiguous project leads, ...) is a dbt
-staging concern, done later where it's visible and testable.
 
 The only transformations applied are structural: locating the header and
 "Generated"/"Report Date" rows by content rather than fixed position, and
@@ -44,8 +42,6 @@ def _text() -> dict[str, Any]:
 
 
 def _date() -> dict[str, Any]:
-    # pandas has no date-only dtype - Excel dates always arrive as
-    # datetime64/Timestamp with an implicit 00:00:00 time we don't want.
     return {"data_type": "date"}
 
 
@@ -157,8 +153,7 @@ def read_excel_raw(
 
     df = raw.iloc[header_row + 1 :].copy()
 
-    # Rename explicitly rather than leaving it to dlt's normalizer, which
-    # mangles some headers (e.g. "Billable?" into "billablex").
+    # Rename explicitly rather than leaving it to dlt's normalizer
     df.columns = headers
     df = df.rename(columns={source: name for source, (name, _) in spec.items()})
 

@@ -71,10 +71,7 @@ models:
 
       - name: employee_is_active
         description: >
-          True if status is Active and termination_date is null. Checking
-          both, not just status, means this stays correct even if the two
-          ever disagree - the model-level test on this model already
-          verifies they don't, but this doesn't rely on that test holding.
+          True if status is Active and termination_date is null. 
         data_tests:
           - not_null
 

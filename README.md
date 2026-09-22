@@ -107,10 +107,6 @@ Every model and column is documented in `models/**/docs/<model>.yml`.
 
 Deliberately not built here: each would be premature for one mart and one snapshot.
 
-- **Schema-drift detection on the load.** The header row is found dynamically, but
-  the column set, order and types aren't validated against an expected schema. I'd
-  check right after locating the header and fail or alert on drift, instead of
-  waiting for a dlt type error or a dbt model that can't find a column.
 - **A point-in-time active check.** `employee_is_active` is a current-state flag.
   Here that is exact: every assignment starts on `2026-02-01`, after every hire and
   termination date. In an evolving system it would misreport people who were active

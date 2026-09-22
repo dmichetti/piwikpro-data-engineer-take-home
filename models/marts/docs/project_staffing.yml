@@ -2,7 +2,9 @@ version: 2
 
 models:
   - name: project_staffing
-    description: Staffing summary. One row per project, including projects with zero active employees assigned.
+    description: >
+      Staffing summary. One row per project, including projects with zero active employees 
+      assigned.
     data_tests:
       - row_exists
     columns:
@@ -25,11 +27,7 @@ models:
           Name of the active employee with role Lead on this project. If more
           than one is active, the one with the most assignment_weekly_hours
           wins (employee_id as tiebreaker). Null if no active employee
-          currently holds the Lead role. Projects with more than one active
-          Lead are a known, monitored anomaly - see
-          tests/warn_multiple_active_leads_per_project.sql, which checks this
-          independently upstream on int_employee_assignements rather than as
-          a column here.
+          currently holds the Lead role.
 
       - name: project_team_size
         data_type: bigint
@@ -53,4 +51,4 @@ models:
 
       - name: refreshed_date
         data_type: date
-        description: Date this mart was last built. Not the source data's own date - see reference_date on the staging models for that.
+        description: Date this mart was last built.
