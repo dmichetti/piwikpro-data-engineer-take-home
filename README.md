@@ -118,6 +118,8 @@ Deliberately not built here: each would be premature for one mart and one snapsh
   it. With more marts I'd add `dim_employees` (resolving the manager from
   `employee_reports_to` with a self-join), `dim_projects` and `fct_assignments`,
   so each new mart doesn't repeat the same joins.
+- **CI/CD.** Tests run locally, by hand. At scale I'd run them automatically on
+  every pull request and deploy to production automatically on merge.
 
 ## Data quality findings
 
